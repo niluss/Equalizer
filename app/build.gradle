@@ -4,7 +4,7 @@ android {
     compileSdkVersion 26
     buildToolsVersion "26.0.2"
     defaultConfig {
-        applicationId "com.jazibkhan.equalizer"
+        applicationId "com.ltapps.equalizer"
         minSdkVersion 15
         targetSdkVersion 26
         versionCode 4
@@ -28,7 +28,7 @@ dependencies {
         exclude group: 'com.android.support', module: 'support-annotations'
     })
     compile 'com.android.support:appcompat-v7:26.+'
-    compile 'com.android.support.constraint:constraint-layout:1.0.2'
+    compile 'com.android.support.constraint:constraint-layout:1.1.0'
     compile 'com.github.marcinmoskala:ArcSeekBar:0.31'
     compile 'com.github.medyo:android-about-page:1.2.2'
     testCompile 'junit:junit:4.12'

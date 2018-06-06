@@ -76,19 +76,15 @@ public class MainActivity extends AppCompatActivity implements SeekBar.OnSeekBar
 
 
         eq = new Equalizer (0, 0);
-        if (eq != null)
+        num_sliders = eq.getNumberOfBands();
+        short r[] = eq.getBandLevelRange();
+        min_level = r[0];
+        max_level = r[1];
+        for (int i = 0; i < num_sliders && i < MAX_SLIDERS; i++)
         {
-            int num_bands = eq.getNumberOfBands();
-            num_sliders = num_bands;
-            short r[] = eq.getBandLevelRange();
-            min_level = r[0];
-            max_level = r[1];
-            for (int i = 0; i < num_sliders && i < MAX_SLIDERS; i++)
-            {
-                int freq_range = eq.getCenterFreq((short)i);
-                sliders[i].setOnSeekBarChangeListener(this);
-                slider_labels[i].setText (milliHzToString(freq_range));
-            }
+            int freq_range = eq.getCenterFreq((short)i);
+            sliders[i].setOnSeekBarChangeListener(this);
+            slider_labels[i].setText (milliHzToString(freq_range));
         }
 
         bb = new BassBoost (0, 0);
@@ -115,8 +111,6 @@ public class MainActivity extends AppCompatActivity implements SeekBar.OnSeekBar
 
         updateUI();
 
-
-
         virtualSlider.setOnProgressChangedListener(new ProgressListener() {
             @Override
             public void invoke(int j) {
@@ -139,28 +133,8 @@ public class MainActivity extends AppCompatActivity implements SeekBar.OnSeekBar
             enableVirtual.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
                 @Override
                 public void onCheckedChanged(CompoundButton compoundButton, boolean b) {
-                    if(enableVirtual.isChecked()){
-                        virtualizer.setEnabled(true);
-                        virtualSlider.setEnabled(true);
-                        virtualSlider.setProgressColor(ContextCompat.getColor(getBaseContext(), R.color.colorAccent));
-                        saveChanges();
-                    }
-                    else{
-                        virtualizer.setEnabled(false);
-                        virtualSlider.setEnabled(false);
-                        virtualSlider.setProgressColor(ContextCompat.getColor(getBaseContext(), R.color.progress_gray));
-                        saveChanges();
-                    }
-                    if(enabled.isChecked()||enableBass.isChecked()||enableVirtual.isChecked()){
-                        Intent startIntent = new Intent(MainActivity.this, ForegroundService.class);
-                        startIntent.setAction(Constants.ACTION.STARTFOREGROUND_ACTION);
-                        startService(startIntent);
-                    }
-                    else{
-                        Intent stopIntent = new Intent(MainActivity.this, ForegroundService.class);
-                        stopIntent.setAction(Constants.ACTION.STOPFOREGROUND_ACTION);
-                        startService(stopIntent);
-                    }
+                    enableDisableVirtualizer();
+                    manageIntent();
                 }
             });
         }
@@ -169,64 +143,28 @@ public class MainActivity extends AppCompatActivity implements SeekBar.OnSeekBar
             enableBass.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
                 @Override
                 public void onCheckedChanged(CompoundButton compoundButton, boolean b) {
-                    if(enableBass.isChecked()){
-                        bb.setEnabled(true);
-                        bassSlider.setEnabled(true);
-                        bassSlider.setProgressColor(ContextCompat.getColor(getBaseContext(), R.color.colorAccent));
-                        saveChanges();
-                    }
-                    else{
-                        bb.setEnabled(false);
-                        bassSlider.setEnabled(false);
-                        bassSlider.setProgressColor(ContextCompat.getColor(getBaseContext(), R.color.progress_gray));
-                        saveChanges();
-                    }
-                    if(enabled.isChecked()||enableBass.isChecked()||enableVirtual.isChecked()){
-                        Intent startIntent = new Intent(MainActivity.this, ForegroundService.class);
-                        startIntent.setAction(Constants.ACTION.STARTFOREGROUND_ACTION);
-                        startService(startIntent);
-                    }
-                    else{
-                        Intent stopIntent = new Intent(MainActivity.this, ForegroundService.class);
-                        stopIntent.setAction(Constants.ACTION.STOPFOREGROUND_ACTION);
-                        startService(stopIntent);
-                    }
+                    enableDisableBassBoost();
+                    saveChanges();
+                    manageIntent();
                 }
             });
         }
         enabled.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             @Override
             public void onCheckedChanged(CompoundButton compoundButton, boolean b) {
-                if(enabled.isChecked()){
-                    eq.setEnabled(true);
-                    saveChanges();
-                    for(int i=0;i<5;i++){
-                        sliders[i].setEnabled(true);
-                    }
-                }
-                else {eq.setEnabled(false);
-                        saveChanges();
-                    for(int i=0;i<5;i++){
-                        sliders[i].setEnabled(false);
-                    }
-                }
-                if(enabled.isChecked()||enableBass.isChecked()||enableVirtual.isChecked()){
-                    Intent startIntent = new Intent(MainActivity.this, ForegroundService.class);
-                    startIntent.setAction(Constants.ACTION.STARTFOREGROUND_ACTION);
-                    startService(startIntent);
-                }
-                else{
-                    Intent stopIntent = new Intent(MainActivity.this, ForegroundService.class);
-                    stopIntent.setAction(Constants.ACTION.STOPFOREGROUND_ACTION);
-                    startService(stopIntent);
-                }
-
-
-
+                enableDisableEQ();
+                manageIntent();
             }
         });
     }
 
+    private void manageIntent() {
+        boolean isStart = enabled.isChecked()||enableBass.isChecked()||enableVirtual.isChecked();
+        String action = isStart ? Constants.ACTION.STARTFOREGROUND_ACTION : Constants.ACTION.STOPFOREGROUND_ACTION;
+        Intent intent = new Intent(MainActivity.this, ForegroundService.class);
+        intent.setAction(action);
+        startService(intent);
+    }
 
     public String milliHzToString (int milliHz)
     {
@@ -236,8 +174,6 @@ public class MainActivity extends AppCompatActivity implements SeekBar.OnSeekBar
         else
             return "" + (milliHz / 1000000) + "kHz";
     }
-
-
 
     @Override
     public void onProgressChanged(SeekBar seekBar, int level, boolean b) {
@@ -260,14 +196,10 @@ public class MainActivity extends AppCompatActivity implements SeekBar.OnSeekBar
     }
 
     @Override
-    public void onStartTrackingTouch(SeekBar seekBar) {
-
-    }
+    public void onStartTrackingTouch(SeekBar seekBar) { }
 
     @Override
-    public void onStopTrackingTouch(SeekBar seekBar) {
-
-    }
+    public void onStopTrackingTouch(SeekBar seekBar) { }
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
@@ -293,51 +225,35 @@ public class MainActivity extends AppCompatActivity implements SeekBar.OnSeekBar
         return super.onOptionsItemSelected(item);
     }
 
+    private void enableDisableBassBoost() {
+        boolean enabled = enableBass.isChecked();
+        bb.setEnabled(enabled);
+        bassSlider.setProgressColor(ContextCompat.getColor(getBaseContext(), enabled ? R.color.colorAccent : R.color.progress_gray));
+        bassSlider.setEnabled(enabled);
+    }
+
+    private void enableDisableVirtualizer() {
+        boolean enabled = enableVirtual.isChecked();
+        virtualizer.setEnabled(enabled);
+        virtualSlider.setProgressColor(ContextCompat.getColor(getBaseContext(), enabled ? R.color.colorAccent : R.color.progress_gray));
+        virtualSlider.setEnabled(enabled);
+    }
+
+    private void enableDisableEQ() {
+        boolean enabled = this.enabled.isChecked();
+        for(int i=0;i<MAX_SLIDERS;i++)
+            sliders[i].setEnabled(enabled);
+        eq.setEnabled(enabled);
+    }
 
     public void updateUI (){
         applyChanges();
-        if(enabled.isChecked()||enableBass.isChecked()||enableVirtual.isChecked()){
-            Intent startIntent = new Intent(MainActivity.this, ForegroundService.class);
-            startIntent.setAction(Constants.ACTION.STARTFOREGROUND_ACTION);
-            startService(startIntent);
-        }
-        else{
-            Intent stopIntent = new Intent(MainActivity.this, ForegroundService.class);
-            stopIntent.setAction(Constants.ACTION.STOPFOREGROUND_ACTION);
-            startService(stopIntent);
-        }
+        manageIntent();
 
-        if(enableBass.isChecked()){
-            bassSlider.setEnabled(true);
-            bassSlider.setProgressColor(ContextCompat.getColor(getBaseContext(), R.color.colorAccent));
-            bb.setEnabled(true);
-            }
-            else{
-            bassSlider.setEnabled(false);
-            bassSlider.setProgressColor(ContextCompat.getColor(getBaseContext(), R.color.progress_gray));
-            bb.setEnabled(false);
-        }
-        if(enableVirtual.isChecked()){
-            virtualizer.setEnabled(true);
-            virtualSlider.setProgressColor(ContextCompat.getColor(getBaseContext(), R.color.colorAccent));
-        virtualSlider.setEnabled(true);
-        }
-        else {
-            virtualizer.setEnabled(false);
-            virtualSlider.setEnabled(false);
-            virtualSlider.setProgressColor(ContextCompat.getColor(getBaseContext(), R.color.progress_gray));
-        }
+        enableDisableBassBoost();
+        enableDisableVirtualizer();
+        enableDisableEQ();
 
-        if(enabled.isChecked()){
-            for(int i=0;i<5;i++)
-                sliders[i].setEnabled(true);
-            eq.setEnabled(true);
-        }
-        else{
-            for(int i=0;i<5;i++)
-                sliders[i].setEnabled(false);
-            eq.setEnabled(false);
-        }
         updateSliders();
         updateBassBoost();
         updateVirtualizer();
@@ -348,11 +264,7 @@ public class MainActivity extends AppCompatActivity implements SeekBar.OnSeekBar
     {
         for (int i = 0; i < num_sliders; i++)
         {
-            int level;
-            if (eq != null)
-                level = eq.getBandLevel ((short)i);
-            else
-                level = 0;
+            int level = eq == null ? 0 : eq.getBandLevel ((short)i);
             int pos = 100 * level / (max_level - min_level) + 50;
             sliders[i].setProgress (pos);
         }

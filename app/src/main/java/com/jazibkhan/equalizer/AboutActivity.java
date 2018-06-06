@@ -15,7 +15,9 @@ public class AboutActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_about);
-        getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+
+        if (getSupportActionBar() != null)
+            getSupportActionBar().setDisplayHomeAsUpEnabled(true);
 
         Element license = new Element();
         license.setTitle("Open Source Licenses");
@@ -31,11 +33,9 @@ public class AboutActivity extends AppCompatActivity {
 
         View aboutPage = new AboutPage(this)
                 .isRTL(false)
-                .setImage(R.mipmap.ic_launcher_round).setDescription("An open source, light weight Equalizer for all devices.").
-                addGroup("Connect with us")
-                .addEmail("jazib27@hotmail.com")
-                .addPlayStore("com.jazibkhan.equalizer")
-                .addGitHub("JazibOfficial/Equalizer")
+                .setImage(R.mipmap.ic_launcher_round).setDescription("An open source, light weight Equalizer for all devices.\n\nFork of JazibOfficial/Equalizer.")
+                .addPlayStore("com.ltapps.equalizer")
+                .addGitHub("niluss/Equalizer")
                 .addItem(license)
                 .create();
 
