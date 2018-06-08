@@ -1,161 +1,272 @@
 package com.jazibkhan.equalizer;
 
-import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.DialogInterface;
 import android.content.Intent;
-import android.content.SharedPreferences;
-import android.graphics.Color;
 import android.media.audiofx.BassBoost;
 import android.media.audiofx.Equalizer;
+import android.media.audiofx.LoudnessEnhancer;
 import android.media.audiofx.Virtualizer;
-import android.preference.PreferenceManager;
-import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
-import android.util.Log;
+import android.text.InputType;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
-import android.widget.Button;
-import android.widget.CheckBox;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
 import android.widget.CompoundButton;
+import android.widget.EditText;
+import android.widget.LinearLayout;
 import android.widget.SeekBar;
+import android.widget.Spinner;
 import android.widget.Switch;
 import android.widget.TextView;
+import android.widget.Toast;
 
-import com.marcinmoskala.arcseekbar.ArcSeekBar;
-import com.marcinmoskala.arcseekbar.ProgressListener;
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+import java.util.ArrayList;
+import java.util.List;
 
-public class MainActivity extends AppCompatActivity implements SeekBar.OnSeekBarChangeListener {
+public class MainActivity extends AppCompatActivity {
+
+    PresetManager presets;
 
     Switch enabled = null;
-    Switch enableBass, enableVirtual;
+    Switch enableBass, enableVirtual, enableLoudness;
 
     Equalizer eq = null;
     BassBoost bb = null;
     Virtualizer virtualizer = null;
+    LoudnessEnhancer loudness = null;
 
-    int min_level = 0;
-    int max_level = 100;
-
+    static final String NEW_LABEL = "New...";
     static final int MAX_SLIDERS = 5; // Must match the XML layout
     SeekBar sliders[] = new SeekBar[MAX_SLIDERS];
-    ArcSeekBar bassSlider,virtualSlider;
+    SeekBar bassSlider,virtualSlider, loudnessSlider;
     TextView slider_labels[] = new TextView[MAX_SLIDERS];
-    int num_sliders = 0;
+    int numSliders = 0;
+
+    Spinner presetSpinner;
+    List<String> presetSpinnerItems;
+    ArrayAdapter<String> presetSpinnerDataAdapter;
+    int prevSelectedIndex;
 
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
 
+        final MainActivity thiz = this;
 
-        enabled =(Switch) findViewById(R.id.switchEnable);
-        enabled.setChecked(true);
+        try {
+            setContentView(R.layout.activity_main);
 
-        sliders[0] = (SeekBar)findViewById(R.id.mySeekBar0);
-        slider_labels[0] = (TextView)findViewById(R.id.centerFreq0);
-        sliders[1] = (SeekBar)findViewById(R.id.mySeekBar1);
-        slider_labels[1] = (TextView)findViewById(R.id.centerFreq1);
-        sliders[2] = (SeekBar)findViewById(R.id.mySeekBar2);
-        slider_labels[2] = (TextView)findViewById(R.id.centerFreq2);
-        sliders[3] = (SeekBar)findViewById(R.id.mySeekBar3);
-        slider_labels[3] = (TextView)findViewById(R.id.centerFreq3);
-        sliders[4] = (SeekBar)findViewById(R.id.mySeekBar4);
-        slider_labels[4] = (TextView)findViewById(R.id.centerFreq4);
-        bassSlider=(ArcSeekBar) findViewById(R.id.bassSeekBar);
-        virtualSlider=(ArcSeekBar) findViewById(R.id.virtualSeekBar);
-        enableBass=(Switch) findViewById(R.id.bassSwitch);
-        enableVirtual=(Switch) findViewById(R.id.virtualSwitch);
-        bassSlider.setMaxProgress(1000);
-        virtualSlider.setMaxProgress(1000);
-        enableBass.setChecked(true);
-        enableVirtual.setChecked(true);
+            eq = new Equalizer(0, 0);
+            loudness = new LoudnessEnhancer(0);
+            virtualizer = new Virtualizer(0, 0);
+            bb = new BassBoost(0, 0);
 
+            numSliders = eq.getNumberOfBands();
+            short r[] = eq.getBandLevelRange();
+            Util.instance().init(r[0], r[1]);
 
+            presets = PresetManager.instance();
+            presets.init(this, MAX_SLIDERS, eq, bb, virtualizer, loudness);
 
+            presetSpinner = findViewById(R.id.spinPresets);
+            presetSpinnerItems = new ArrayList<String>();
+            presetSpinnerDataAdapter = new ArrayAdapter<String>(this, R.layout.spinner_layout, presetSpinnerItems);
+            presetSpinner.setAdapter(presetSpinnerDataAdapter);
 
-        eq = new Equalizer (0, 0);
-        num_sliders = eq.getNumberOfBands();
-        short r[] = eq.getBandLevelRange();
-        min_level = r[0];
-        max_level = r[1];
-        for (int i = 0; i < num_sliders && i < MAX_SLIDERS; i++)
-        {
-            int freq_range = eq.getCenterFreq((short)i);
-            sliders[i].setOnSeekBarChangeListener(this);
-            slider_labels[i].setText (milliHzToString(freq_range));
-        }
+            enabled = findViewById(R.id.switchEnable);
+            enabled.setChecked(true);
 
-        bb = new BassBoost (0, 0);
-        virtualizer = new Virtualizer (0, 0);
+            enableLoudness = findViewById(R.id.loudnessSwitch);
+            enableLoudness.setChecked(true);
+            loudnessSlider = findViewById(R.id.loudnessSeekBar);
+            loudnessSlider.setMax(1000);
 
+            enableVirtual = findViewById(R.id.virtualSwitch);
+            enableVirtual.setChecked(true);
+            virtualSlider = findViewById(R.id.virtualSeekBar);
+            virtualSlider.setMax(1000);
 
-        SharedPreferences myPreferences
-                = PreferenceManager.getDefaultSharedPreferences(this);
-        SharedPreferences.Editor myEditor = myPreferences.edit();
-        if(!myPreferences.contains("initial")) {
-            myEditor.putBoolean("initial", true);
-            myEditor.putBoolean("eqswitch", true);
-            myEditor.putBoolean("bbswitch", true);
-            myEditor.putBoolean("virswitch", true);
-            myEditor.putInt("bbslider", (int)bb.getRoundedStrength());
-            myEditor.putInt("virslider", (int)virtualizer.getRoundedStrength());
-            myEditor.putInt("slider0", 100 * eq.getBandLevel((short)0) / (max_level - min_level) + 50);
-            myEditor.putInt("slider1", 100 * eq.getBandLevel((short)1) / (max_level - min_level) + 50);
-            myEditor.putInt("slider2", 100 * eq.getBandLevel((short)2) / (max_level - min_level) + 50);
-            myEditor.putInt("slider3", 100 * eq.getBandLevel((short)3) / (max_level - min_level) + 50);
-            myEditor.putInt("slider4", 100 * eq.getBandLevel((short)4) / (max_level - min_level) + 50);
-            myEditor.commit();
-        }
+            enableBass = findViewById(R.id.bassSwitch);
+            enableBass.setChecked(true);
+            bassSlider = findViewById(R.id.bassSeekBar);
+            bassSlider.setMax(100);
 
-        updateUI();
+            sliders[0] = findViewById(R.id.mySeekBar0);
+            slider_labels[0] = findViewById(R.id.centerFreq0);
+            sliders[1] = findViewById(R.id.mySeekBar1);
+            slider_labels[1] = findViewById(R.id.centerFreq1);
+            sliders[2] = findViewById(R.id.mySeekBar2);
+            slider_labels[2] = findViewById(R.id.centerFreq2);
+            sliders[3] =  findViewById(R.id.mySeekBar3);
+            slider_labels[3] = findViewById(R.id.centerFreq3);
+            sliders[4] = findViewById(R.id.mySeekBar4);
+            slider_labels[4] = findViewById(R.id.centerFreq4);
 
-        virtualSlider.setOnProgressChangedListener(new ProgressListener() {
-            @Override
-            public void invoke(int j) {
-                virtualizer.setStrength((short)j);
-                saveChanges();
-            }
-        });
-
-        bassSlider.setOnProgressChangedListener(new ProgressListener() {
-            @Override
-            public void invoke(int i) {
-                Log.d("WOW", "level bass slider*************************** "+(short)i );
-                bb.setStrength((short)i);
-                Log.d("WOW", "set progress actual bass level *************************** "+bb.getRoundedStrength() );
-                saveChanges();
-            }
-        });
-        if (virtualizer != null)
-        {
-            enableVirtual.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            SeekBar.OnSeekBarChangeListener sliderListener = new SeekBar.OnSeekBarChangeListener() {
                 @Override
-                public void onCheckedChanged(CompoundButton compoundButton, boolean b) {
-                    enableDisableVirtualizer();
-                    manageIntent();
+                public void onProgressChanged(SeekBar seekBar, int level, boolean b) {
+                    if (seekBar == loudnessSlider) {
+                        loudness.setTargetGain((short) level);
+                    } else if (seekBar == virtualSlider) {
+                        virtualizer.setStrength((short) level);
+                    } else if (seekBar == bassSlider) {
+                        bb.setStrength((short) level);
+                    } else {
+                        int seekBarIndex = (Integer) seekBar.getTag();
+                        eq.setBandLevel((short)seekBarIndex, Util.instance().progressToEqLevel(level));
+                        presets.getSelected().bandValues.set(seekBarIndex, level);
+                    }
                 }
-            });
-        }
-        if (bb != null)
-        {
-            enableBass.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+
+                @Override
+                public void onStartTrackingTouch(SeekBar seekBar) { }
+
+                @Override
+                public void onStopTrackingTouch(SeekBar seekBar) {
+                    presets.saveSelectedPreset();
+                }
+            };
+
+            for (int i = 0; i < numSliders && i < MAX_SLIDERS; i++) {
+                int freq_range = eq.getCenterFreq((short) i);
+                sliders[i].setTag(i);
+                sliders[i].setProgress(0);
+                sliders[i].setOnSeekBarChangeListener(sliderListener);
+                slider_labels[i].setText(milliHzToString(freq_range));
+            }
+
+            if (!bb.getStrengthSupported()) {
+                ((LinearLayout)bassSlider.getParent()).setVisibility(View.GONE);
+            }
+
+            updateUI();
+            updateSpinner();
+
+            virtualSlider.setOnSeekBarChangeListener(sliderListener);
+            bassSlider.setOnSeekBarChangeListener(sliderListener);
+            loudnessSlider.setOnSeekBarChangeListener(sliderListener);
+
+            CompoundButton.OnCheckedChangeListener switchListener = new CompoundButton.OnCheckedChangeListener() {
                 @Override
                 public void onCheckedChanged(CompoundButton compoundButton, boolean b) {
-                    enableDisableBassBoost();
+                    if (enabled == compoundButton) {
+                        enableDisableEQ();
+                    } else if (enableLoudness == compoundButton) {
+                        enableDisableLoudness();
+                    } else if (enableVirtual == compoundButton) {
+                        enableDisableVirtualizer();
+                    } else if (enableBass == compoundButton) {
+                        enableDisableBassBoost();
+                    }
                     saveChanges();
                     manageIntent();
                 }
+            };
+
+            enabled.setOnCheckedChangeListener(switchListener);
+            enableLoudness.setOnCheckedChangeListener(switchListener);
+            enableVirtual.setOnCheckedChangeListener(switchListener);
+            enableBass.setOnCheckedChangeListener(switchListener);
+
+            presetSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+                @Override
+                public void onItemSelected(AdapterView<?> adapterView, View view, int pos, long id) {
+                    if (pos == presets.size()) {
+                        thiz.prevSelectedIndex = thiz.presets.getSelectedIndex();
+                        thiz.presets.newPreset("Eq" + thiz.presets.size(), true);
+                        updateUI();
+                        updateSpinner();
+
+                        showNameInputDialog();
+                    } else {
+                        thiz.presets.setSelectedPreset(pos);
+                        updateUI();
+                    }
+                }
+
+                @Override
+                public void onNothingSelected(AdapterView<?> adapterView) {
+                }
             });
+
+            findViewById(R.id.butDelete).setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View view) {
+                    if (thiz.presets.size() == 1) {
+                        toast("You cannot delete the last preset");
+                        return;
+                    } else {
+                        showDeleteConfirmDialog();
+                    }
+                }
+            });
+
+        } catch (Exception e) {
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            e.printStackTrace(new PrintStream(bos));
+            Toast.makeText(getApplicationContext(), e.getMessage() + "\n" + bos.toString(), Toast.LENGTH_LONG).show();
         }
-        enabled.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+    }
+
+    private void showNameInputDialog() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("New Preset");
+
+        final MainActivity thiz = this;
+        final EditText input = new EditText(this);
+        input.setInputType(InputType.TYPE_CLASS_TEXT);
+        builder.setView(input);
+        builder.setPositiveButton("OK", new DialogInterface.OnClickListener() {
             @Override
-            public void onCheckedChanged(CompoundButton compoundButton, boolean b) {
-                enableDisableEQ();
-                manageIntent();
+            public void onClick(DialogInterface dialog, int which) {
+                thiz.presets.getSelected().name = input.getText().toString();
+                thiz.presets.saveSelectedPreset();
+
+                updateUI();
+                updateSpinner();
             }
         });
+        builder.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                thiz.presets.deleteSelected();
+                thiz.presets.setSelectedPreset(prevSelectedIndex);
+                updateUI();
+                updateSpinner();
+                dialog.cancel();
+            }
+        });
+        builder.show();
+    }
+
+    private void showDeleteConfirmDialog() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("Delete");
+        builder.setMessage("Continue delete?");
+
+        final MainActivity thiz = this;
+        builder.setPositiveButton("OK", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                thiz.presets.deleteSelected();
+                updateUI();
+                updateSpinner();
+            }
+        });
+        builder.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                dialog.cancel();
+            }
+        });
+        builder.show();
     }
 
     private void manageIntent() {
@@ -172,34 +283,8 @@ public class MainActivity extends AppCompatActivity implements SeekBar.OnSeekBar
         if (milliHz < 1000000)
             return "" + (milliHz / 1000) + "Hz";
         else
-            return "" + (milliHz / 1000000) + "kHz";
+        return "" + (milliHz / 1000000) + "kHz";
     }
-
-    @Override
-    public void onProgressChanged(SeekBar seekBar, int level, boolean b) {
-
-        if (eq != null)
-        {
-            int new_level=min_level+(max_level-min_level)*level / 100;
-
-            for (int i=0;i<num_sliders;i++)
-            {
-                if (sliders[i]==seekBar)
-                {
-                    eq.setBandLevel((short)i,(short)new_level);
-                    saveChanges();
-                    break;
-                }
-            }
-        }
-
-    }
-
-    @Override
-    public void onStartTrackingTouch(SeekBar seekBar) { }
-
-    @Override
-    public void onStopTrackingTouch(SeekBar seekBar) { }
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
@@ -228,15 +313,19 @@ public class MainActivity extends AppCompatActivity implements SeekBar.OnSeekBar
     private void enableDisableBassBoost() {
         boolean enabled = enableBass.isChecked();
         bb.setEnabled(enabled);
-        bassSlider.setProgressColor(ContextCompat.getColor(getBaseContext(), enabled ? R.color.colorAccent : R.color.progress_gray));
         bassSlider.setEnabled(enabled);
     }
 
     private void enableDisableVirtualizer() {
         boolean enabled = enableVirtual.isChecked();
         virtualizer.setEnabled(enabled);
-        virtualSlider.setProgressColor(ContextCompat.getColor(getBaseContext(), enabled ? R.color.colorAccent : R.color.progress_gray));
         virtualSlider.setEnabled(enabled);
+    }
+
+    private void enableDisableLoudness() {
+        boolean enabled = enableLoudness.isChecked();
+        loudness.setEnabled(enabled);
+        loudnessSlider.setEnabled(enabled);
     }
 
     private void enableDisableEQ() {
@@ -246,82 +335,92 @@ public class MainActivity extends AppCompatActivity implements SeekBar.OnSeekBar
         eq.setEnabled(enabled);
     }
 
+    private void updateSpinner() {
+        presetSpinnerItems.clear();
+        for(int i = 0; i < presets.size(); i++) {
+            presetSpinnerItems.add(presets.get(i).name);
+        }
+        presetSpinnerItems.add(NEW_LABEL);
+        presetSpinnerDataAdapter.notifyDataSetChanged();
+        presetSpinner.setSelection(presets.getSelectedIndex());
+    }
+
     public void updateUI (){
         applyChanges();
         manageIntent();
 
+        enableDisableEQ();
         enableDisableBassBoost();
         enableDisableVirtualizer();
-        enableDisableEQ();
+        enableDisableLoudness();
 
         updateSliders();
         updateBassBoost();
         updateVirtualizer();
-
+        updateLoudness ();
     }
 
-    public void updateSliders ()
-    {
-        for (int i = 0; i < num_sliders; i++)
-        {
-            int level = eq == null ? 0 : eq.getBandLevel ((short)i);
-            int pos = 100 * level / (max_level - min_level) + 50;
-            sliders[i].setProgress (pos);
+    public void updateSliders () {
+        for (int i = 0; i < numSliders; i++) {
+            short eqLevel = eq.getBandLevel ((short)i);
+            int progress = Util.instance().eqLevelToProgress(eqLevel);
+            sliders[i].setProgress (progress);
         }
     }
 
-    public void updateBassBoost ()
-    {
+    public void updateBassBoost () {
         if (bb != null)
             bassSlider.setProgress (bb.getRoundedStrength());
         else
             bassSlider.setProgress(0);
     }
 
-    public void updateVirtualizer ()
-    {
+    public void updateVirtualizer () {
         if (virtualizer != null)
             virtualSlider.setProgress (virtualizer.getRoundedStrength());
         else
             virtualSlider.setProgress (0);
     }
 
-    public void saveChanges(){
-        SharedPreferences myPreferences
-                = PreferenceManager.getDefaultSharedPreferences(this);
-        SharedPreferences.Editor myEditor = myPreferences.edit();
-        myEditor.putBoolean("initial", true);
-        myEditor.putBoolean("eqswitch", enabled.isChecked());
-        myEditor.putBoolean("bbswitch", enableBass.isChecked());
-        myEditor.putBoolean("virswitch", enableVirtual.isChecked());
-        Log.d("WOW", "actual bass level *************************** "+bb.getRoundedStrength());
-        Log.d("WOW", "actual vir level *************************** "+ virtualizer.getRoundedStrength() );
-
-        myEditor.putInt("bbslider", (int)bb.getRoundedStrength());
-        myEditor.putInt("virslider", (int)virtualizer.getRoundedStrength());
-        myEditor.putInt("slider0", 100 * eq.getBandLevel((short)0) / (max_level - min_level) + 50);
-        myEditor.putInt("slider1", 100 * eq.getBandLevel((short)1) / (max_level - min_level) + 50);
-        myEditor.putInt("slider2", 100 * eq.getBandLevel((short)2) / (max_level - min_level) + 50);
-        myEditor.putInt("slider3", 100 * eq.getBandLevel((short)3) / (max_level - min_level) + 50);
-        myEditor.putInt("slider4", 100 * eq.getBandLevel((short)4) / (max_level - min_level) + 50);
-        myEditor.commit();
-    }
-    public void applyChanges(){
-        SharedPreferences myPreferences
-            = PreferenceManager.getDefaultSharedPreferences(this);
-        enabled.setChecked(myPreferences.getBoolean("eqswitch",true));
-        enableBass.setChecked(myPreferences.getBoolean("bbswitch",true));
-        enableVirtual.setChecked(myPreferences.getBoolean("virswitch",true));
-        eq.setBandLevel((short)0,(short)(min_level+(max_level-min_level)*myPreferences.getInt("slider0",0) / 100));
-        eq.setBandLevel((short)1,(short)(min_level+(max_level-min_level)*myPreferences.getInt("slider1",0) / 100));
-        eq.setBandLevel((short)2,(short)(min_level+(max_level-min_level)*myPreferences.getInt("slider2",0) / 100));
-        eq.setBandLevel((short)3,(short)(min_level+(max_level-min_level)*myPreferences.getInt("slider3",0) / 100));
-        eq.setBandLevel((short)4,(short)(min_level+(max_level-min_level)*myPreferences.getInt("slider4",0) / 100));
-        bb.setStrength((short)myPreferences.getInt("bbslider",0));
-        virtualizer.setStrength((short)myPreferences.getInt("virslider",0));
-        Log.d("WOW", "bass level *************************** "+(short)myPreferences.getInt("bbslider",0) );
-        Log.d("WOW", "virtualizer level *************************** "+(short)myPreferences.getInt("virslider",0) );
+    public void updateLoudness () {
+        if (loudness != null)
+            loudnessSlider.setProgress ((short)loudness.getTargetGain());
+        else
+            loudnessSlider.setProgress (0);
     }
 
+    public void saveChanges() {
+        Preset preset = presets.getSelected();
+        preset.eqEnabled = enabled.isChecked();
+        preset.bassBoostEnabled = enableBass.isChecked();
+        preset.virtualizerEnabled = enableVirtual.isChecked();
+        preset.loudnessEnabled = enableLoudness.isChecked();
+        preset.bandValues.clear();
+        for(short i=0; i<MAX_SLIDERS; i++) {
+            preset.bandValues.add(Util.instance().eqLevelToProgress(eq.getBandLevel((short)i)));
+        }
+        preset.bassBoostValue = bb.getRoundedStrength();
+        preset.virtualizerValue = virtualizer.getRoundedStrength();
+        preset.loudnessValue = (short)loudness.getTargetGain();
 
+        presets.saveSelectedPreset();
+    }
+    public void applyChanges() {
+        Preset preset = presets.getSelected();
+
+        enabled.setChecked(preset.eqEnabled);
+        enableBass.setChecked(preset.bassBoostEnabled);
+        enableVirtual.setChecked(preset.virtualizerEnabled);
+        enableLoudness.setChecked(preset.loudnessEnabled);
+        for(int i=0; i<MAX_SLIDERS; i++) {
+            eq.setBandLevel((short)i, Util.instance().progressToEqLevel(preset.bandValues.get(i)));
+        }
+        bb.setStrength(preset.bassBoostValue);
+        virtualizer.setStrength(preset.virtualizerValue);
+        loudness.setTargetGain(preset.loudnessValue);
+    }
+
+    private void toast(String message) {
+        Toast.makeText(getApplicationContext(), message, Toast.LENGTH_SHORT).show();
+    }
 }
