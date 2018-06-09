@@ -63,17 +63,17 @@ public class MainActivity extends AppCompatActivity {
         try {
             setContentView(R.layout.activity_main);
 
-            eq = new Equalizer(0, 0);
-            loudness = new LoudnessEnhancer(0);
-            virtualizer = new Virtualizer(0, 0);
-            bb = new BassBoost(0, 0);
+            presets = PresetManager.instance();
+            presets.init(this, MAX_SLIDERS);
+
+            eq = presets.eq;
+            loudness = presets.loudnessEnhancer;
+            virtualizer = presets.virtualizer;
+            bb = presets.bb;
 
             numSliders = eq.getNumberOfBands();
             short r[] = eq.getBandLevelRange();
             Util.instance().init(r[0], r[1]);
-
-            presets = PresetManager.instance();
-            presets.init(this, MAX_SLIDERS, eq, bb, virtualizer, loudness);
 
             presetSpinner = findViewById(R.id.spinPresets);
             presetSpinnerItems = new ArrayList<String>();
@@ -112,32 +112,32 @@ public class MainActivity extends AppCompatActivity {
             SeekBar.OnSeekBarChangeListener sliderListener = new SeekBar.OnSeekBarChangeListener() {
                 @Override
                 public void onProgressChanged(SeekBar seekBar, int level, boolean b) {
-                    if (seekBar == loudnessSlider) {
-                        loudness.setTargetGain((short) level);
-                    } else if (seekBar == virtualSlider) {
-                        virtualizer.setStrength((short) level);
-                    } else if (seekBar == bassSlider) {
-                        bb.setStrength((short) level);
+                    if (seekBar == thiz.loudnessSlider) {
+                        thiz.loudness.setTargetGain((short) level);
+                        thiz.presets.getSelected().loudnessValue = (short) level;
+                    } else if (seekBar == thiz.virtualSlider) {
+                        thiz.virtualizer.setStrength((short) level);
+                        thiz.presets.getSelected().virtualizerValue = (short) level;
+                    } else if (seekBar == thiz.bassSlider) {
+                        thiz.bb.setStrength((short) level);
+                        thiz.presets.getSelected().bassBoostValue = (short) level;
                     } else {
                         int seekBarIndex = (Integer) seekBar.getTag();
-                        eq.setBandLevel((short)seekBarIndex, Util.instance().progressToEqLevel(level));
-                        presets.getSelected().bandValues.set(seekBarIndex, level);
+                        thiz.eq.setBandLevel((short)seekBarIndex, Util.instance().progressToEqLevel(level));
+                        thiz.presets.getSelected().bandValues.set(seekBarIndex, level);
                     }
+                    thiz.presets.saveSelectedPreset();
                 }
-
                 @Override
                 public void onStartTrackingTouch(SeekBar seekBar) { }
-
                 @Override
-                public void onStopTrackingTouch(SeekBar seekBar) {
-                    presets.saveSelectedPreset();
-                }
+                public void onStopTrackingTouch(SeekBar seekBar) { }
             };
 
             for (int i = 0; i < numSliders && i < MAX_SLIDERS; i++) {
                 int freq_range = eq.getCenterFreq((short) i);
                 sliders[i].setTag(i);
-                sliders[i].setProgress(0);
+//                sliders[i].setProgress(0);
                 sliders[i].setOnSeekBarChangeListener(sliderListener);
                 slider_labels[i].setText(milliHzToString(freq_range));
             }
@@ -156,17 +156,21 @@ public class MainActivity extends AppCompatActivity {
             CompoundButton.OnCheckedChangeListener switchListener = new CompoundButton.OnCheckedChangeListener() {
                 @Override
                 public void onCheckedChanged(CompoundButton compoundButton, boolean b) {
-                    if (enabled == compoundButton) {
-                        enableDisableEQ();
-                    } else if (enableLoudness == compoundButton) {
-                        enableDisableLoudness();
-                    } else if (enableVirtual == compoundButton) {
-                        enableDisableVirtualizer();
-                    } else if (enableBass == compoundButton) {
-                        enableDisableBassBoost();
+                    if (thiz.enabled == compoundButton) {
+                        thiz.enableDisableEQ();
+                        thiz.presets.getSelected().eqEnabled = b;
+                    } else if (thiz.enableLoudness == compoundButton) {
+                        thiz.enableDisableLoudness();
+                        thiz.presets.getSelected().loudnessEnabled = b;
+                    } else if (thiz.enableVirtual == compoundButton) {
+                        thiz.enableDisableVirtualizer();
+                        thiz.presets.getSelected().virtualizerEnabled = b;
+                    } else if (thiz.enableBass == compoundButton) {
+                        thiz.enableDisableBassBoost();
+                        thiz.presets.getSelected().bassBoostEnabled = b;
                     }
-                    saveChanges();
-                    manageIntent();
+                    thiz.presets.saveSelectedPreset();
+                    thiz.manageIntent();
                 }
             };
 
@@ -178,22 +182,19 @@ public class MainActivity extends AppCompatActivity {
             presetSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
                 @Override
                 public void onItemSelected(AdapterView<?> adapterView, View view, int pos, long id) {
-                    if (pos == presets.size()) {
+                    if (pos == thiz.presets.size()) {
                         thiz.prevSelectedIndex = thiz.presets.getSelectedIndex();
-                        thiz.presets.newPreset("Eq" + thiz.presets.size(), true);
-                        updateUI();
-                        updateSpinner();
-
-                        showNameInputDialog();
+                        thiz.presets.newPreset("New" + thiz.presets.size(), true);
+                        thiz.updateUI();
+                        thiz.updateSpinner();
+                        thiz.showNameInputDialog();
                     } else {
                         thiz.presets.setSelectedPreset(pos);
-                        updateUI();
+                        thiz.updateUI();
                     }
                 }
-
                 @Override
-                public void onNothingSelected(AdapterView<?> adapterView) {
-                }
+                public void onNothingSelected(AdapterView<?> adapterView) { }
             });
 
             findViewById(R.id.butDelete).setOnClickListener(new View.OnClickListener() {
@@ -222,15 +223,15 @@ public class MainActivity extends AppCompatActivity {
         final MainActivity thiz = this;
         final EditText input = new EditText(this);
         input.setInputType(InputType.TYPE_CLASS_TEXT);
+        input.setText(thiz.presets.getSelected().name);
         builder.setView(input);
         builder.setPositiveButton("OK", new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialog, int which) {
                 thiz.presets.getSelected().name = input.getText().toString();
                 thiz.presets.saveSelectedPreset();
-
-                updateUI();
-                updateSpinner();
+                thiz.updateUI();
+                thiz.updateSpinner();
             }
         });
         builder.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
@@ -238,8 +239,8 @@ public class MainActivity extends AppCompatActivity {
             public void onClick(DialogInterface dialog, int which) {
                 thiz.presets.deleteSelected();
                 thiz.presets.setSelectedPreset(prevSelectedIndex);
-                updateUI();
-                updateSpinner();
+                thiz.updateUI();
+                thiz.updateSpinner();
                 dialog.cancel();
             }
         });
@@ -256,8 +257,8 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onClick(DialogInterface dialog, int which) {
                 thiz.presets.deleteSelected();
-                updateUI();
-                updateSpinner();
+                thiz.updateUI();
+                thiz.updateSpinner();
             }
         });
         builder.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
@@ -357,36 +358,27 @@ public class MainActivity extends AppCompatActivity {
         updateSliders();
         updateBassBoost();
         updateVirtualizer();
-        updateLoudness ();
+        updateLoudness();
     }
 
     public void updateSliders () {
         for (int i = 0; i < numSliders; i++) {
             short eqLevel = eq.getBandLevel ((short)i);
             int progress = Util.instance().eqLevelToProgress(eqLevel);
-            sliders[i].setProgress (progress);
+            sliders[i].setProgress (progress, true);
         }
     }
 
     public void updateBassBoost () {
-        if (bb != null)
-            bassSlider.setProgress (bb.getRoundedStrength());
-        else
-            bassSlider.setProgress(0);
+        bassSlider.setProgress (bb.getRoundedStrength(), true);
     }
 
     public void updateVirtualizer () {
-        if (virtualizer != null)
-            virtualSlider.setProgress (virtualizer.getRoundedStrength());
-        else
-            virtualSlider.setProgress (0);
+        virtualSlider.setProgress (virtualizer.getRoundedStrength(), true);
     }
 
     public void updateLoudness () {
-        if (loudness != null)
-            loudnessSlider.setProgress ((short)loudness.getTargetGain());
-        else
-            loudnessSlider.setProgress (0);
+        loudnessSlider.setProgress ((short)loudness.getTargetGain(), true);
     }
 
     public void saveChanges() {
@@ -421,6 +413,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void toast(String message) {
-        Toast.makeText(getApplicationContext(), message, Toast.LENGTH_SHORT).show();
+        Toast.makeText(getApplicationContext(), message, Toast.LENGTH_LONG).show();
     }
 }

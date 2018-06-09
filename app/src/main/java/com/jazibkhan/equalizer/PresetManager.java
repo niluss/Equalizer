@@ -30,12 +30,14 @@ public class PresetManager {
     public final String EQ_PRESET_COUNT = "EqPresetCount";
     public final String EQ_PRESET_SELECTED = "EqPresetSelected";
     public final String EQ_PRESET_PREFIX = "EqPreset-";
-    public final String PRESET_NAME_PREFIX = "Preset-";
+    public final String EQ_RECENTS = "EqRecents";
+    public final int MAX_RECENTS = 5;
 
     private Preset presetDefault;
     private String presetDefaultStr;
     private int presetSelected;
     private ArrayList<Preset> presets;
+    private ArrayList<Integer> recentPresets;
 
     private PresetManager() { }
 
@@ -46,12 +48,17 @@ public class PresetManager {
         return instance;
     }
 
-    public void init(AppCompatActivity activity, int maxSliders, Equalizer eq, BassBoost bb, Virtualizer virtualizer, LoudnessEnhancer loudnessEnhancer) {
+    public void init(AppCompatActivity activity, int maxSliders) {
         this.presets = new ArrayList<>();
         this.activity = activity;
         this.maxSliders = maxSliders;
         this.minLevel = minLevel;
         this.maxLevel = maxLevel;
+
+        eq = new Equalizer(0, 0);
+        loudnessEnhancer = new LoudnessEnhancer(0);
+        virtualizer = new Virtualizer(0, 0);
+        bb = new BassBoost(0, 0);
 
         this.eq = eq;
         this.bb = bb;
@@ -62,9 +69,9 @@ public class PresetManager {
         int virtualizerValue = (int) virtualizer.getRoundedStrength();
         int loudnessValue = (int) loudnessEnhancer.getTargetGain();
 
-        SharedPreferences myPreferences
+        SharedPreferences pref
                 = PreferenceManager.getDefaultSharedPreferences(activity);
-        SharedPreferences.Editor myEditor = myPreferences.edit();
+        SharedPreferences.Editor myEditor = pref.edit();
 
         {   // define presetDefault
             presetDefault = new Preset("Default");
@@ -79,27 +86,29 @@ public class PresetManager {
                 presetDefault.bandValues.add(50);
             }
 
-            presetDefaultStr = presetToString(presetDefault);
+            presetDefaultStr = presetDefault.toString();
         }
 
         // if first time
-        if(!myPreferences.contains(EQ_PRESET_EXISTS)) {
+        if(!pref.contains(EQ_PRESET_EXISTS)) {
             createAndAddDefaultPreset();
         }
 
         { // load saved presets
-            int presetCount = myPreferences.getInt(EQ_PRESET_COUNT, 0);
-            presetSelected = myPreferences.getInt(EQ_PRESET_SELECTED, 0);
+            int presetCount = pref.getInt(EQ_PRESET_COUNT, 0);
+            presetSelected = pref.getInt(EQ_PRESET_SELECTED, 0);
 
             if (presetCount == 0) {
                 createAndAddDefaultPreset();
             } else {
-                presetDefaultStr = presetToString(presetDefault);
-
                 for(int i=0; i<presetCount; i++) {
-                    String strPreset =  myPreferences.getString(EQ_PRESET_PREFIX + i, presetDefaultStr);
-                    presets.add(stringToPreset(strPreset));
+                    String strPreset =  pref.getString(EQ_PRESET_PREFIX + i, presetDefaultStr);
+                    presets.add(Preset.newFromString(strPreset));
                 }
+
+                // load recentPresets
+//                String recentsStr = pref.getString(EQ_RECENTS, "[]");
+//                recentPresets = new Gson().fromJson(recentsStr, ArrayList.class);
             }
 
             if (presetSelected < 0 || presetCount >= presetCount) {
@@ -147,8 +156,7 @@ public class PresetManager {
         myEditor.putInt(EQ_PRESET_COUNT, presets.size());
 
         for(int i=0; i<presets.size(); i++) {
-            Preset current = presets.get(i);
-            String strCurrent = presetToString(current);
+            String strCurrent = presets.get(i).toString();
             myEditor.putString(EQ_PRESET_PREFIX + i, strCurrent);
         }
 
@@ -167,8 +175,7 @@ public class PresetManager {
             return;
         }
 
-        Preset selected = presets.get(presetSelected);
-        String strSelected = presetToString(selected);
+        String strSelected = presets.get(presetSelected).toString();
 
         myEditor.putBoolean(EQ_PRESET_EXISTS, true);
         myEditor.putInt(EQ_PRESET_COUNT, presets.size());
@@ -184,8 +191,7 @@ public class PresetManager {
         }
         SharedPreferences.Editor myEditor = getEditor();
 
-        Preset current = presets.get(index);
-        String strCurrent = presetToString(current);
+        String strCurrent = presets.get(index).toString();
 
         myEditor.putString(EQ_PRESET_PREFIX + index, strCurrent);
         myEditor.commit();
@@ -226,16 +232,30 @@ public class PresetManager {
     public void setSelectedPreset(int index) {
         if (index >= 0 && index < presets.size()) {
             SharedPreferences.Editor myEditor = getEditor();
+
             presetSelected = index;
             myEditor.putInt(EQ_PRESET_SELECTED, presetSelected);
-            myEditor.commit();
 
-//            toast("preset: " + presetToString(getSelected()));
-//            toast("presetSelected: " + presetSelected);
-//            toast("presetsCount: " + presets.size());
+//            addToRecents(presetSelected);
+//            myEditor.putString(EQ_RECENTS, new Gson().toJson(recentPresets));
+
+            myEditor.commit();
         } else {
             toast("Invalid index " + index);
         }
+    }
+
+    private void addToRecents(int index) {
+        removeFromRecents(index);
+        recentPresets.add(0, index);
+        for (int i = recentPresets.size() - 1; i >= MAX_RECENTS; i--)
+            recentPresets.remove(i);
+    }
+
+    private void removeFromRecents(int index) {
+        int i = recentPresets.indexOf(index);
+        if (i == -1)
+            recentPresets.remove(i);
     }
 
     private SharedPreferences.Editor getEditor() {
@@ -244,14 +264,7 @@ public class PresetManager {
     }
 
     private Preset copyPreset(Preset preset) {
-        return stringToPreset(presetToString(preset));
-    }
-    public String presetToString(Preset preset) {
-        return new Gson().toJson(preset);
-    }
-
-    private Preset stringToPreset(String preset) {
-        return new Gson().fromJson(preset, Preset.class);
+        return preset.clone();
     }
 
     private void toast(String message) {

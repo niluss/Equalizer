@@ -15,6 +15,9 @@ public class AboutActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+
+        final AppCompatActivity thiz = this;
+
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_about);
 
@@ -33,15 +36,16 @@ public class AboutActivity extends AppCompatActivity {
         });
 
         Element effects = new Element();
-        effects.setTitle("List effects");
+        effects.setTitle("List presets");
         effects.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                String message = "";
-                AudioEffect.Descriptor effects[] = AudioEffect.queryEffects();
-                for(AudioEffect.Descriptor effect : effects) {
-                    message += effect.name + ", " + effect.connectMode + ", " + effect.implementor + "\n";
+                PresetManager presets = PresetManager.instance();
+                String message = "Presets: \n";
+                for(int i=0; i<presets.size(); i++) {
+                    message += "p" + i + ": " + presets.get(i).toString() + "\n";
                 }
+
                 Toast.makeText(getApplicationContext(), message, Toast.LENGTH_LONG).show();
             }
         });
